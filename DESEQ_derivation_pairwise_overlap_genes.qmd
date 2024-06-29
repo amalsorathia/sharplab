@@ -1,0 +1,1413 @@
+---
+title: "Deseq_tutorial"
+format: html
+editor: visual
+---
+
+## Quick DESeq2 Tutorial
+
+First load in the pan-ischemic data and assemble data for DE
+
+```{r}
+library(tidyverse)
+library(knitr)
+if (!requireNamespace("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+BiocManager::install("DESeq2")
+library(DESeq2)
+```
+
+```{r}
+counts_table <- as_tibble(read_csv("/Users/amalsorathia/Documents/code/bioinformatics_research/FSTIA_counts.csv"))
+
+partek_master_TIA <- as_tibble(read_csv("/Users/amalsorathia/Documents/code/bioinformatics_research/NEW_FINAL_derivation_TIAs.csv"))
+
+partek_master_VRFC <- as_tibble(read_csv("/Users/amalsorathia/Documents/code/bioinformatics_research/NEW_FINAL_derivation_VRFCs.csv"))
+
+partek_master_Mimic_migraine <- as_tibble(read_csv("/Users/amalsorathia/Documents/code/bioinformatics_research/NEW_FINAL_derivation_mimic_migraine.csv"))
+
+partek_master_Mimic_no_migraine <- as_tibble(read_csv("/Users/amalsorathia/Documents/code/bioinformatics_research/NEW_FINAL_derivation_mimic_no_migraine.csv"))
+
+# load in validation files
+
+partek_master_TIA_validation <- as_tibble(read_csv("/Users/amalsorathia/Documents/code/bioinformatics_research/NEW_FINAL_validation_TIAs.csv"))
+
+partek_master_VRFC_validation <- as_tibble(read_csv("/Users/amalsorathia/Documents/code/bioinformatics_research/NEW_FINAL_validation_VRFCs.csv"))
+
+partek_master_Mimic_migraine_validation <- as_tibble(read_csv("/Users/amalsorathia/Documents/code/bioinformatics_research/NEW_FINAL_validation_mimic_migraine.csv"))
+
+partek_master_Mimic_no_migraine_validation <- as_tibble(read_csv("/Users/amalsorathia/Documents/code/bioinformatics_research/NEW_FINAL_validation_mimic_no_migraine.csv"))
+
+
+#check whether to use age.x or age_z -> go back to matching cohort
+#if 0 sig genes, make summary table for migraine vs control -> how many genes passed adjusted 0.05 p-value and un-adjusted, helps make
+#decision on what to use, or too small values then filter less (ex. filter 5 instead of 10), or let go of covariates
+
+# ids that u have, create data frame with FSTIA counts for derivation cohort for every 
+
+
+pan_df_TIA_derivation <- partek_master_TIA %>% 
+  select(Sample_name,
+         Diagnosis_migraine_PC,
+         Age.x, 
+         Gender, 
+         Diabetes, 
+         Hypercholesterolemia, 
+         Hypertension_history)
+
+pan_df_VRFC_derivation <- partek_master_VRFC %>% 
+  select(Sample_name,
+         Diagnosis_migraine_PC,
+         Age.x, 
+         Gender, 
+         Diabetes, 
+         Hypercholesterolemia, 
+         Hypertension_history)
+
+pan_df_Mimic_migraine_derivation <- partek_master_Mimic_migraine %>% 
+  select(Sample_name,
+         Diagnosis_migraine_PC,
+         Age.x, 
+         Gender, 
+         Diabetes, 
+         Hypercholesterolemia, 
+         Hypertension_history)
+
+pan_df_Mimic_no_migraine_derivation <- partek_master_Mimic_no_migraine %>% 
+  select(Sample_name,
+         Diagnosis_migraine_PC,
+         Age.x, 
+         Gender, 
+         Diabetes, 
+         Hypercholesterolemia, 
+         Hypertension_history)
+
+#validation
+pan_df_TIA_validation <- partek_master_TIA_validation %>% 
+  select(Sample_name,
+         Diagnosis_migraine_PC,
+         Age.x, 
+         Gender, 
+         Diabetes, 
+         Hypercholesterolemia, 
+         Hypertension_history)
+
+pan_df_VRFC_validation <- partek_master_VRFC_validation %>% 
+  select(Sample_name,
+         Diagnosis_migraine_PC,
+         Age.x, 
+         Gender, 
+         Diabetes, 
+         Hypercholesterolemia, 
+         Hypertension_history)
+
+pan_df_Mimic_migraine_validation <- partek_master_Mimic_migraine_validation %>% 
+  select(Sample_name,
+         Diagnosis_migraine_PC,
+         Age.x, 
+         Gender, 
+         Diabetes, 
+         Hypercholesterolemia, 
+         Hypertension_history)
+
+pan_df_Mimic_no_migraine_validation <- partek_master_Mimic_no_migraine_validation %>% 
+  select(Sample_name,
+         Diagnosis_migraine_PC,
+         Age.x, 
+         Gender, 
+         Diabetes, 
+         Hypercholesterolemia, 
+         Hypertension_history)
+
+
+#VRFC PAIRWISE COMPARISONS FOR DERIVATION COHORTS
+
+
+## create binding of pairwise comparisons
+
+pan_df_VRFC_vs_TIA_derivation = rbind(as.data.frame(pan_df_VRFC_derivation),
+                          as.data.frame(pan_df_TIA_derivation))
+
+# mutate so VRFC is 0 and TIA is 1
+
+pan_df_VRFC_vs_TIA_derivation <- pan_df_VRFC_vs_TIA_derivation %>% 
+  mutate(diagnosis = as.factor(if_else(Diagnosis_migraine_PC == "VRFC", 0, 1)),
+         sex = as.factor(if_else(Gender == "Male", 0, 1)), 
+         ht = as.factor(if_else(Hypertension_history == "No", 0, 1)),
+         dm = as.factor(if_else(Diabetes == "No", 0, 1)), 
+         hc = as.factor(if_else(Hypercholesterolemia == "No", 0, 1)),
+         age_z  = as.vector(scale(Age.x)))
+
+
+pan_df_VRFC_vs_Mimic_migraine_derivation = rbind(as.data.frame(pan_df_VRFC_derivation),
+                          as.data.frame(pan_df_Mimic_migraine_derivation))
+
+
+# mutate so VRFC is 0 and Mimic_migraine is 1
+
+pan_df_VRFC_vs_Mimic_migraine_derivation <- pan_df_VRFC_vs_Mimic_migraine_derivation %>% 
+  mutate(diagnosis = as.factor(if_else(Diagnosis_migraine_PC == "VRFC", 0, 1)),
+         sex = as.factor(if_else(Gender == "Male", 0, 1)), 
+         ht = as.factor(if_else(Hypertension_history == "No", 0, 1)),
+         dm = as.factor(if_else(Diabetes == "No", 0, 1)), 
+         hc = as.factor(if_else(Hypercholesterolemia == "No", 0, 1)),
+         age_z  = as.vector(scale(Age.x)))
+
+pan_df_VRFC_vs_Mimic_no_migraine_derivation = rbind(as.data.frame(pan_df_VRFC_derivation),
+                          as.data.frame(pan_df_Mimic_no_migraine_derivation))
+
+# mutate so VRFC is 0 and Mimic_no_migraine is 1
+
+pan_df_VRFC_vs_Mimic_no_migraine_derivation <- pan_df_VRFC_vs_Mimic_no_migraine_derivation %>% 
+  mutate(diagnosis = as.factor(if_else(Diagnosis_migraine_PC == "VRFC", 0, 1)),
+         sex = as.factor(if_else(Gender == "Male", 0, 1)), 
+         ht = as.factor(if_else(Hypertension_history == "No", 0, 1)),
+         dm = as.factor(if_else(Diabetes == "No", 0, 1)), 
+         hc = as.factor(if_else(Hypercholesterolemia == "No", 0, 1)),
+         age_z  = as.vector(scale(Age.x)))
+
+#bind df of TIA and Mimic_migraine
+pan_df_TIA_vs_Mimic_migraine_derivation = rbind(as.data.frame(pan_df_TIA_derivation),
+                          as.data.frame(pan_df_Mimic_migraine_derivation))
+
+# mutate so True TIA is 0 and Mimic_migraine is 1
+
+pan_df_TIA_vs_Mimic_migraine_derivation <- pan_df_TIA_vs_Mimic_migraine_derivation %>% 
+  mutate(diagnosis = as.factor(if_else(Diagnosis_migraine_PC == "True TIA", 0, 1)),
+         sex = as.factor(if_else(Gender == "Male", 0, 1)), 
+         ht = as.factor(if_else(Hypertension_history == "No", 0, 1)),
+         dm = as.factor(if_else(Diabetes == "No", 0, 1)), 
+         hc = as.factor(if_else(Hypercholesterolemia == "No", 0, 1)),
+         age_z  = as.vector(scale(Age.x)))
+
+#bind df of TIA and Mimic_no_migraine
+pan_df_TIA_vs_Mimic_no_migraine_derivation = rbind(as.data.frame(pan_df_TIA_derivation),
+                          as.data.frame(pan_df_Mimic_no_migraine_derivation))
+
+# mutate so True TIA is 0 and Mimic_no_migraine is 1
+
+pan_df_TIA_vs_Mimic_no_migraine_derivation <- pan_df_TIA_vs_Mimic_no_migraine_derivation %>% 
+  mutate(diagnosis = as.factor(if_else(Diagnosis_migraine_PC == "True TIA", 0, 1)),
+         sex = as.factor(if_else(Gender == "Male", 0, 1)), 
+         ht = as.factor(if_else(Hypertension_history == "No", 0, 1)),
+         dm = as.factor(if_else(Diabetes == "No", 0, 1)), 
+         hc = as.factor(if_else(Hypercholesterolemia == "No", 0, 1)),
+         age_z  = as.vector(scale(Age.x)))
+
+#bind df of Mimic_migraine and Mimic_no_migraine
+pan_df_Mimic_migraine_vs_Mimic_no_migraine_derivation = rbind(as.data.frame(pan_df_Mimic_migraine_derivation),
+                          as.data.frame(pan_df_Mimic_no_migraine_derivation))
+
+# mutate so Mimic_migraine is 0 and Mimic_no_migraine is 1
+
+pan_df_Mimic_migraine_vs_Mimic_no_migraine_derivation <- pan_df_Mimic_migraine_vs_Mimic_no_migraine_derivation %>% 
+  mutate(diagnosis = as.factor(if_else(Diagnosis_migraine_PC == "Mimic_migraine", 0, 1)),
+         sex = as.factor(if_else(Gender == "Male", 0, 1)), 
+         ht = as.factor(if_else(Hypertension_history == "No", 0, 1)),
+         dm = as.factor(if_else(Diabetes == "No", 0, 1)), 
+         hc = as.factor(if_else(Hypercholesterolemia == "No", 0, 1)),
+         age_z  = as.vector(scale(Age.x)))
+
+# now do same for validation
+
+#VRFC PAIRWISE COMPARISONS FOR VALIDATION COHORTS
+
+
+## create binding of pairwise comparisons
+
+pan_df_VRFC_vs_TIA_validation = rbind(as.data.frame(pan_df_VRFC_validation),
+                          as.data.frame(pan_df_TIA_validation))
+
+# mutate so VRFC is 0 and TIA is 1
+
+pan_df_VRFC_vs_TIA_validation <- pan_df_VRFC_vs_TIA_validation %>% 
+  mutate(diagnosis = as.factor(if_else(Diagnosis_migraine_PC == "VRFC", 0, 1)),
+         sex = as.factor(if_else(Gender == "Male", 0, 1)), 
+         ht = as.factor(if_else(Hypertension_history == "No", 0, 1)),
+         dm = as.factor(if_else(Diabetes == "No", 0, 1)), 
+         hc = as.factor(if_else(Hypercholesterolemia == "No", 0, 1)),
+         age_z  = as.vector(scale(Age.x)))
+
+
+pan_df_VRFC_vs_Mimic_migraine_validation = rbind(as.data.frame(pan_df_VRFC_validation),
+                          as.data.frame(pan_df_Mimic_migraine_validation))
+
+
+# mutate so VRFC is 0 and Mimic_migraine is 1
+
+pan_df_VRFC_vs_Mimic_migraine_validation <- pan_df_VRFC_vs_Mimic_migraine_validation %>% 
+  mutate(diagnosis = as.factor(if_else(Diagnosis_migraine_PC == "VRFC", 0, 1)),
+         sex = as.factor(if_else(Gender == "Male", 0, 1)), 
+         ht = as.factor(if_else(Hypertension_history == "No", 0, 1)),
+         dm = as.factor(if_else(Diabetes == "No", 0, 1)), 
+         hc = as.factor(if_else(Hypercholesterolemia == "No", 0, 1)),
+         age_z  = as.vector(scale(Age.x)))
+
+pan_df_VRFC_vs_Mimic_no_migraine_validation = rbind(as.data.frame(pan_df_VRFC_validation),
+                          as.data.frame(pan_df_Mimic_no_migraine_validation))
+
+# mutate so VRFC is 0 and Mimic_no_migraine is 1
+
+pan_df_VRFC_vs_Mimic_no_migraine_validation <- pan_df_VRFC_vs_Mimic_no_migraine_validation %>% 
+  mutate(diagnosis = as.factor(if_else(Diagnosis_migraine_PC == "VRFC", 0, 1)),
+         sex = as.factor(if_else(Gender == "Male", 0, 1)), 
+         ht = as.factor(if_else(Hypertension_history == "No", 0, 1)),
+         dm = as.factor(if_else(Diabetes == "No", 0, 1)), 
+         hc = as.factor(if_else(Hypercholesterolemia == "No", 0, 1)),
+         age_z  = as.vector(scale(Age.x)))
+
+#bind df of TIA and Mimic_migraine
+pan_df_TIA_vs_Mimic_migraine_validation = rbind(as.data.frame(pan_df_TIA_validation),
+                          as.data.frame(pan_df_Mimic_migraine_validation))
+
+# mutate so True TIA is 0 and Mimic_migraine is 1
+
+pan_df_TIA_vs_Mimic_migraine_validation <- pan_df_TIA_vs_Mimic_migraine_validation %>% 
+  mutate(diagnosis = as.factor(if_else(Diagnosis_migraine_PC == "True TIA", 0, 1)),
+         sex = as.factor(if_else(Gender == "Male", 0, 1)), 
+         ht = as.factor(if_else(Hypertension_history == "No", 0, 1)),
+         dm = as.factor(if_else(Diabetes == "No", 0, 1)), 
+         hc = as.factor(if_else(Hypercholesterolemia == "No", 0, 1)),
+         age_z  = as.vector(scale(Age.x)))
+
+#bind df of TIA and Mimic_no_migraine
+pan_df_TIA_vs_Mimic_no_migraine_validation = rbind(as.data.frame(pan_df_TIA_validation),
+                          as.data.frame(pan_df_Mimic_no_migraine_validation))
+
+# mutate so True TIA is 0 and Mimic_no_migraine is 1
+
+pan_df_TIA_vs_Mimic_no_migraine_validation <- pan_df_TIA_vs_Mimic_no_migraine_validation %>% 
+  mutate(diagnosis = as.factor(if_else(Diagnosis_migraine_PC == "True TIA", 0, 1)),
+         sex = as.factor(if_else(Gender == "Male", 0, 1)), 
+         ht = as.factor(if_else(Hypertension_history == "No", 0, 1)),
+         dm = as.factor(if_else(Diabetes == "No", 0, 1)), 
+         hc = as.factor(if_else(Hypercholesterolemia == "No", 0, 1)),
+         age_z  = as.vector(scale(Age.x)))
+
+#bind df of Mimic_migraine and Mimic_no_migraine
+pan_df_Mimic_migraine_vs_Mimic_no_migraine_validation = rbind(as.data.frame(pan_df_Mimic_migraine_validation),
+                          as.data.frame(pan_df_Mimic_no_migraine_validation))
+
+# mutate so Mimic_migraine is 0 and Mimic_no_migraine is 1
+
+pan_df_Mimic_migraine_vs_Mimic_no_migraine_validation <- pan_df_Mimic_migraine_vs_Mimic_no_migraine_validation %>% 
+  mutate(diagnosis = as.factor(if_else(Diagnosis_migraine_PC == "Mimic_migraine", 0, 1)),
+         sex = as.factor(if_else(Gender == "Male", 0, 1)), 
+         ht = as.factor(if_else(Hypertension_history == "No", 0, 1)),
+         dm = as.factor(if_else(Diabetes == "No", 0, 1)), 
+         hc = as.factor(if_else(Hypercholesterolemia == "No", 0, 1)),
+         age_z  = as.vector(scale(Age.x)))
+
+```
+
+```{r}
+#VRFC vs TIA
+
+# deal with derivation
+
+filtered_counts_VRFC_vs_TIA_derivation <- counts_table %>% 
+  select(gene.id, all_of(pan_df_VRFC_vs_TIA_derivation$Sample_name)) %>% 
+  column_to_rownames(var = "gene.id")
+
+
+
+DE_genes <- function(variable){
+  d <- DESeqDataSetFromMatrix(filtered_counts_VRFC_vs_TIA_derivation, colData = pan_df_VRFC_vs_TIA_derivation, design = as.formula(paste0("~ ", variable)))
+  #add line of filter before getting covariate genes
+  # Calculate the smallest group size (70% of total samples)
+  smallestGroupSize <- round(0.7 * ncol(counts(d)))
+  keep <- rowSums(counts(d) >= 10) >= smallestGroupSize
+  d <- d[keep,]
+  ob <- DESeq(d)
+  res <- results(ob)
+  res_table <- data.frame(
+    genes = rownames(res),
+    wald_p = res$pvalue)
+  res_table$covariate <- rep(variable, nrow(res_table))
+  return(res_table)
+}
+
+covariates <- c("dm","sex","ht","hc","age_z")
+covariate_DE <- lapply(covariates, DE_genes)
+
+covar_genes_VRFC_vs_TIA_derivation <- bind_rows(covariate_DE) %>% 
+  filter(wald_p < 0.001) %>% 
+  distinct(genes)
+
+head(covar_genes_VRFC_vs_TIA_derivation)
+
+# deal with validation
+
+filtered_counts_VRFC_vs_TIA_validation <- counts_table %>% 
+  select(gene.id, all_of(pan_df_VRFC_vs_TIA_validation$Sample_name)) %>% 
+  column_to_rownames(var = "gene.id")
+
+  #add line of filter before getting covariate genes
+  # Calculate the smallest group size (70% of total samples)
+  #smallestGroupSize <- round(0.7 * ncol(counts(d)))
+
+DE_genes <- function(variable){
+  d <- DESeqDataSetFromMatrix(filtered_counts_VRFC_vs_TIA_validation, colData = pan_df_VRFC_vs_TIA_validation, design = as.formula(paste0("~ ", variable)))
+  #add line of filter before getting covariate genes
+  # Calculate the smallest group size (70% of total samples)
+  smallestGroupSize <- round(0.7 * ncol(counts(d)))
+  keep <- rowSums(counts(d) >= 10) >= smallestGroupSize
+  d <- d[keep,]
+  ob <- DESeq(d)
+  res <- results(ob)
+  res_table <- data.frame(
+    genes = rownames(res),
+    wald_p = res$pvalue)
+  res_table$covariate <- rep(variable, nrow(res_table))
+  return(res_table)
+}
+
+covariates <- c("dm","sex","ht","hc","age_z")
+covariate_DE <- lapply(covariates, DE_genes)
+
+covar_genes_VRFC_vs_TIA_validation <- bind_rows(covariate_DE) %>% 
+  filter(wald_p < 0.001) %>% 
+  distinct(genes)
+
+print("These are my validation covar genes")
+head(covar_genes_VRFC_vs_TIA_validation)
+
+
+# get overlap covariate genes of derivation and validation TIA
+
+overlap_genes_VRFC_vs_TIA <- data.frame(intersect(covar_genes_VRFC_vs_TIA_derivation$genes, covar_genes_VRFC_vs_TIA_validation$genes))
+
+# Print the overlap genes
+print("These are my overlap genes")
+print(overlap_genes_VRFC_vs_TIA)
+
+write_csv(overlap_genes_VRFC_vs_TIA, "overlap_genes_VRFC_vs_TIA.csv")
+
+
+```
+
+```{r}
+
+#VRFC vs Mimic_migraine
+
+# deal with derivation
+
+filtered_counts_VRFC_vs_Mimic_migraine_derivation <- counts_table %>% 
+  select(gene.id, all_of(pan_df_VRFC_vs_Mimic_migraine_derivation$Sample_name)) %>% 
+  column_to_rownames(var = "gene.id")
+
+DE_genes <- function(variable){
+  d <- DESeqDataSetFromMatrix(filtered_counts_VRFC_vs_Mimic_migraine_derivation, colData = pan_df_VRFC_vs_Mimic_migraine_derivation, design = as.formula(paste0("~ ", variable)))
+  #add line of filter before getting covariate genes
+  # Calculate the smallest group size (70% of total samples)
+  smallestGroupSize <- round(0.7 * ncol(counts(d)))
+  keep <- rowSums(counts(d) >= 10) >= smallestGroupSize
+  d <- d[keep,]
+  ob <- DESeq(d)
+  res <- results(ob)
+  res_table <- data.frame(
+    genes = rownames(res),
+    wald_p = res$pvalue)
+  res_table$covariate <- rep(variable, nrow(res_table))
+  return(res_table)
+}
+
+covariates <- c("dm","sex","ht","hc","age_z")
+covariate_DE <- lapply(covariates, DE_genes)
+
+covar_genes_VRFC_vs_Mimic_migraine_derivation <- bind_rows(covariate_DE) %>% 
+  filter(wald_p < 0.001) %>% 
+  distinct(genes)
+
+head(covar_genes_VRFC_vs_Mimic_migraine_derivation)
+
+
+# deal with validation
+
+filtered_counts_VRFC_vs_Mimic_migraine_validation <- counts_table %>% 
+  select(gene.id, all_of(pan_df_VRFC_vs_Mimic_migraine_validation$Sample_name)) %>% 
+  column_to_rownames(var = "gene.id")
+
+
+
+DE_genes <- function(variable){
+  d <- DESeqDataSetFromMatrix(filtered_counts_VRFC_vs_Mimic_migraine_validation, colData = pan_df_VRFC_vs_Mimic_migraine_validation, design = as.formula(paste0("~ ", variable)))
+  #add line of filter before getting covariate genes
+  # Calculate the smallest group size (70% of total samples)
+  smallestGroupSize <- round(0.7 * ncol(counts(d)))
+  keep <- rowSums(counts(d) >= 10) >= smallestGroupSize
+  d <- d[keep,]
+  ob <- DESeq(d)
+  res <- results(ob)
+  res_table <- data.frame(
+    genes = rownames(res),
+    wald_p = res$pvalue)
+  res_table$covariate <- rep(variable, nrow(res_table))
+  return(res_table)
+}
+
+covariates <- c("dm","sex","ht","hc","age_z")
+covariate_DE <- lapply(covariates, DE_genes)
+print(covariate_DE)
+
+covar_genes_VRFC_vs_Mimic_migraine_validation <- bind_rows(covariate_DE) %>% 
+  filter(wald_p < 0.001) %>% 
+  distinct(genes)
+
+print(covar_genes_VRFC_vs_Mimic_migraine_validation)
+
+
+# get overlap covariate genes of derivation and validation TIA
+
+overlap_genes_VRFC_vs_Mimic_migraine <- data.frame(intersect(covar_genes_VRFC_vs_Mimic_migraine_derivation$genes, covar_genes_VRFC_vs_Mimic_migraine_validation$genes))
+
+# Print the overlap genes
+print("This is my overlap")
+print(overlap_genes_VRFC_vs_Mimic_migraine)
+
+write_csv(overlap_genes_VRFC_vs_Mimic_migraine, "overlap_genes_VRFC_vs_Mimic_migraine.csv")
+
+
+```
+
+```{r}
+
+#VRFC vs Mimic_no_migraine
+
+# deal with derivation
+
+filtered_counts_VRFC_vs_Mimic_no_migraine_derivation <- counts_table %>% 
+  select(gene.id, all_of(pan_df_VRFC_vs_Mimic_no_migraine_derivation$Sample_name)) %>% 
+  column_to_rownames(var = "gene.id")
+
+DE_genes <- function(variable){
+  d <- DESeqDataSetFromMatrix(filtered_counts_VRFC_vs_Mimic_no_migraine_derivation, colData = pan_df_VRFC_vs_Mimic_no_migraine_derivation, design = as.formula(paste0("~ ", variable)))
+  #add line of filter before getting covariate genes
+  # Calculate the smallest group size (70% of total samples)
+  smallestGroupSize <- round(0.7 * ncol(counts(d)))
+  keep <- rowSums(counts(d) >= 10) >= smallestGroupSize
+  d <- d[keep,]
+  ob <- DESeq(d)
+  res <- results(ob)
+  res_table <- data.frame(
+    genes = rownames(res),
+    wald_p = res$pvalue)
+  res_table$covariate <- rep(variable, nrow(res_table))
+  return(res_table)
+}
+
+covariates <- c("dm","sex","ht","hc","age_z")
+covariate_DE <- lapply(covariates, DE_genes)
+
+covar_genes_VRFC_vs_Mimic_no_migraine_derivation <- bind_rows(covariate_DE) %>% 
+  filter(wald_p < 0.001) %>% 
+  distinct(genes)
+
+head(covar_genes_VRFC_vs_Mimic_no_migraine_derivation)
+
+
+# deal with validation
+
+filtered_counts_VRFC_vs_Mimic_no_migraine_validation <- counts_table %>% 
+  select(gene.id, all_of(pan_df_VRFC_vs_Mimic_no_migraine_validation$Sample_name)) %>% 
+  column_to_rownames(var = "gene.id")
+
+
+DE_genes <- function(variable){
+  d <- DESeqDataSetFromMatrix(filtered_counts_VRFC_vs_Mimic_no_migraine_validation, colData = pan_df_VRFC_vs_Mimic_no_migraine_validation, design = as.formula(paste0("~ ", variable)))
+  #add line of filter before getting covariate genes
+  # Calculate the smallest group size (70% of total samples)
+  smallestGroupSize <- round(0.7 * ncol(counts(d)))
+  keep <- rowSums(counts(d) >= 10) >= smallestGroupSize
+  d <- d[keep,]
+  ob <- DESeq(d)
+  res <- results(ob)
+  res_table <- data.frame(
+    genes = rownames(res),
+    wald_p = res$pvalue)
+  res_table$covariate <- rep(variable, nrow(res_table))
+  return(res_table)
+}
+
+covariates <- c("dm","sex","ht","hc","age_z")
+covariate_DE <- lapply(covariates, DE_genes)
+
+covar_genes_VRFC_vs_Mimic_no_migraine_validation <- bind_rows(covariate_DE) %>% 
+  filter(wald_p < 0.001) %>% 
+  distinct(genes)
+
+head(covar_genes_VRFC_vs_Mimic_no_migraine_validation)
+
+
+# get overlap covariate genes of derivation and validation TIA
+
+overlap_genes_VRFC_vs_Mimic_no_migraine <- data.frame(intersect(covar_genes_VRFC_vs_Mimic_no_migraine_derivation$genes, covar_genes_VRFC_vs_Mimic_no_migraine_validation$genes))
+
+# Print the overlap genes
+print(overlap_genes_VRFC_vs_Mimic_no_migraine)
+
+write_csv(overlap_genes_VRFC_vs_Mimic_no_migraine, "overlap_genes_VRFC_vs_Mimic_no_migraine.csv")
+
+
+```
+
+```{r}
+#TIA vs Mimic_migraine
+
+# deal with derivation
+
+filtered_counts_TIA_vs_Mimic_migraine_derivation <- counts_table %>% 
+  select(gene.id, all_of(pan_df_TIA_vs_Mimic_migraine_derivation$Sample_name)) %>% 
+  column_to_rownames(var = "gene.id")
+
+DE_genes <- function(variable){
+  d <- DESeqDataSetFromMatrix(filtered_counts_TIA_vs_Mimic_migraine_derivation, colData = pan_df_TIA_vs_Mimic_migraine_derivation, design = as.formula(paste0("~ ", variable)))
+  #add line of filter before getting covariate genes
+  # Calculate the smallest group size (70% of total samples)
+  smallestGroupSize <- round(0.7 * ncol(counts(d)))
+  keep <- rowSums(counts(d) >= 10) >= smallestGroupSize
+  d <- d[keep,]
+  ob <- DESeq(d)
+  res <- results(ob)
+  res_table <- data.frame(
+    genes = rownames(res),
+    wald_p = res$pvalue)
+  res_table$covariate <- rep(variable, nrow(res_table))
+  return(res_table)
+}
+
+covariates <- c("dm","sex","ht","hc","age_z")
+covariate_DE <- lapply(covariates, DE_genes)
+
+covar_genes_TIA_vs_Mimic_migraine_derivation <- bind_rows(covariate_DE) %>% 
+  filter(wald_p < 0.001) %>% 
+  distinct(genes)
+
+head(covar_genes_TIA_vs_Mimic_migraine_derivation)
+
+
+# deal with validation
+
+filtered_counts_TIA_vs_Mimic_migraine_validation <- counts_table %>% 
+  select(gene.id, all_of(pan_df_TIA_vs_Mimic_migraine_validation$Sample_name)) %>% 
+  column_to_rownames(var = "gene.id")
+
+
+DE_genes <- function(variable){
+  d <- DESeqDataSetFromMatrix(filtered_counts_TIA_vs_Mimic_migraine_validation, colData = pan_df_TIA_vs_Mimic_migraine_validation, design = as.formula(paste0("~ ", variable)))
+  #add line of filter before getting covariate genes
+  # Calculate the smallest group size (70% of total samples)
+  smallestGroupSize <- round(0.7 * ncol(counts(d)))
+  keep <- rowSums(counts(d) >= 10) >= smallestGroupSize
+  d <- d[keep,]
+  ob <- DESeq(d)
+  res <- results(ob)
+  res_table <- data.frame(
+    genes = rownames(res),
+    wald_p = res$pvalue)
+  res_table$covariate <- rep(variable, nrow(res_table))
+  return(res_table)
+}
+
+covariates <- c("dm","sex","ht","hc","age_z")
+covariate_DE <- lapply(covariates, DE_genes)
+
+covar_genes_TIA_vs_Mimic_migraine_validation <- bind_rows(covariate_DE) %>% 
+  filter(wald_p < 0.001) %>% 
+  distinct(genes)
+
+head(covar_genes_TIA_vs_Mimic_migraine_validation)
+
+
+# get overlap covariate genes of derivation and validation TIA
+
+overlap_genes_TIA_vs_Mimic_migraine <- data.frame(intersect(covar_genes_TIA_vs_Mimic_migraine_derivation$genes, covar_genes_TIA_vs_Mimic_migraine_validation$genes))
+
+# Print the overlap genes
+print(overlap_genes_TIA_vs_Mimic_migraine)
+
+write_csv(overlap_genes_TIA_vs_Mimic_migraine, "overlap_genes_TIA_vs_Mimic_migraine.csv")
+
+
+```
+
+```{r}
+#TIA vs Mimic_no_migraine
+# deal with derivation
+
+filtered_counts_TIA_vs_Mimic_no_migraine_derivation <- counts_table %>% 
+  select(gene.id, all_of(pan_df_TIA_vs_Mimic_no_migraine_derivation$Sample_name)) %>% 
+  column_to_rownames(var = "gene.id")
+
+DE_genes <- function(variable){
+  d <- DESeqDataSetFromMatrix(filtered_counts_TIA_vs_Mimic_no_migraine_derivation, colData = pan_df_TIA_vs_Mimic_no_migraine_derivation, design = as.formula(paste0("~ ", variable)))
+  #add line of filter before getting covariate genes
+  # Calculate the smallest group size (70% of total samples)
+  smallestGroupSize <- round(0.7 * ncol(counts(d)))
+  keep <- rowSums(counts(d) >= 10) >= smallestGroupSize
+  d <- d[keep,]
+  ob <- DESeq(d)
+  res <- results(ob)
+  res_table <- data.frame(
+    genes = rownames(res),
+    wald_p = res$pvalue)
+  res_table$covariate <- rep(variable, nrow(res_table))
+  return(res_table)
+}
+
+covariates <- c("dm","sex","ht","hc","age_z")
+covariate_DE <- lapply(covariates, DE_genes)
+
+covar_genes_TIA_vs_Mimic_no_migraine_derivation <- bind_rows(covariate_DE) %>% 
+  filter(wald_p < 0.001) %>% 
+  distinct(genes)
+
+head(covar_genes_TIA_vs_Mimic_no_migraine_derivation)
+
+
+# deal with validation
+
+filtered_counts_TIA_vs_Mimic_no_migraine_validation <- counts_table %>% 
+  select(gene.id, all_of(pan_df_TIA_vs_Mimic_no_migraine_validation$Sample_name)) %>% 
+  column_to_rownames(var = "gene.id")
+
+
+DE_genes <- function(variable){
+  d <- DESeqDataSetFromMatrix(filtered_counts_TIA_vs_Mimic_no_migraine_validation, colData = pan_df_TIA_vs_Mimic_no_migraine_validation, design = as.formula(paste0("~ ", variable)))
+  #add line of filter before getting covariate genes
+  # Calculate the smallest group size (70% of total samples)
+  smallestGroupSize <- round(0.7 * ncol(counts(d)))
+  keep <- rowSums(counts(d) >= 10) >= smallestGroupSize
+  d <- d[keep,]
+  ob <- DESeq(d)
+  res <- results(ob)
+  res_table <- data.frame(
+    genes = rownames(res),
+    wald_p = res$pvalue)
+  res_table$covariate <- rep(variable, nrow(res_table))
+  return(res_table)
+}
+
+covariates <- c("dm","sex","ht","hc","age_z")
+covariate_DE <- lapply(covariates, DE_genes)
+
+covar_genes_TIA_vs_Mimic_no_migraine_validation <- bind_rows(covariate_DE) %>% 
+  filter(wald_p < 0.001) %>% 
+  distinct(genes)
+
+head(covar_genes_TIA_vs_Mimic_no_migraine_validation)
+
+
+# get overlap covariate genes of derivation and validation TIA
+
+overlap_genes_TIA_vs_Mimic_no_migraine <- data.frame(intersect(covar_genes_TIA_vs_Mimic_no_migraine_derivation$genes, covar_genes_TIA_vs_Mimic_no_migraine_validation$genes))
+
+# Print the overlap genes
+print(overlap_genes_TIA_vs_Mimic_no_migraine)
+
+write_csv(overlap_genes_TIA_vs_Mimic_no_migraine, "overlap_genes_TIA_vs_Mimic_no_migraine.csv")
+
+```
+
+```{r}
+
+#Mimic_migraine vs Mimic_no_migraine
+
+# deal with derivation
+
+filtered_counts_Mimic_migraine_vs_Mimic_no_migraine_derivation <- counts_table %>% 
+  select(gene.id, all_of(pan_df_Mimic_migraine_vs_Mimic_no_migraine_derivation$Sample_name)) %>% 
+  column_to_rownames(var = "gene.id")
+
+DE_genes <- function(variable){
+  d <- DESeqDataSetFromMatrix(filtered_counts_Mimic_migraine_vs_Mimic_no_migraine_derivation, colData = pan_df_Mimic_migraine_vs_Mimic_no_migraine_derivation, design = as.formula(paste0("~ ", variable)))
+  #add line of filter before getting covariate genes
+  # Calculate the smallest group size (70% of total samples)
+  smallestGroupSize <- round(0.7 * ncol(counts(d)))
+  keep <- rowSums(counts(d) >= 10) >= smallestGroupSize
+  d <- d[keep,]
+  ob <- DESeq(d)
+  res <- results(ob)
+  res_table <- data.frame(
+    genes = rownames(res),
+    wald_p = res$pvalue)
+  res_table$covariate <- rep(variable, nrow(res_table))
+  return(res_table)
+}
+
+covariates <- c("dm","sex","ht","hc","age_z")
+covariate_DE <- lapply(covariates, DE_genes)
+
+covar_genes_Mimic_migraine_vs_Mimic_no_migraine_derivation <- bind_rows(covariate_DE) %>% 
+  filter(wald_p < 0.001) %>% 
+  distinct(genes)
+
+head(covar_genes_Mimic_migraine_vs_Mimic_no_migraine_derivation)
+
+
+# deal with validation
+
+filtered_counts_Mimic_migraine_vs_Mimic_no_migraine_validation <- counts_table %>% 
+  select(gene.id, all_of(pan_df_Mimic_migraine_vs_Mimic_no_migraine_validation$Sample_name)) %>% 
+  column_to_rownames(var = "gene.id")
+
+
+DE_genes <- function(variable){
+  d <- DESeqDataSetFromMatrix(filtered_counts_Mimic_migraine_vs_Mimic_no_migraine_validation, colData = pan_df_Mimic_migraine_vs_Mimic_no_migraine_validation, design = as.formula(paste0("~ ", variable)))
+  #add line of filter before getting covariate genes
+  # Calculate the smallest group size (70% of total samples)
+  smallestGroupSize <- round(0.7 * ncol(counts(d)))
+  keep <- rowSums(counts(d) >= 10) >= smallestGroupSize
+  d <- d[keep,]
+  ob <- DESeq(d)
+  res <- results(ob)
+  res_table <- data.frame(
+    genes = rownames(res),
+    wald_p = res$pvalue)
+  res_table$covariate <- rep(variable, nrow(res_table))
+  return(res_table)
+}
+
+covariates <- c("dm","sex","ht","hc","age_z")
+covariate_DE <- lapply(covariates, DE_genes)
+
+covar_genes_Mimic_migraine_vs_Mimic_no_migraine_validation <- bind_rows(covariate_DE) %>% 
+  filter(wald_p < 0.001) %>% 
+  distinct(genes)
+
+head(covar_genes_Mimic_migraine_vs_Mimic_no_migraine_validation)
+
+
+# get overlap covariate genes of derivation and validation TIA
+
+overlap_gene_Mimic_migraine_vs_Mimic_no_migraine <- data.frame(intersect(covar_genes_Mimic_migraine_vs_Mimic_no_migraine_derivation$genes, covar_genes_Mimic_migraine_vs_Mimic_no_migraine_validation$genes))
+
+# Print the overlap genes
+print(overlap_gene_Mimic_migraine_vs_Mimic_no_migraine)
+
+write_csv(overlap_gene_Mimic_migraine_vs_Mimic_no_migraine, "overlap_gene_Mimic_migraine_vs_Mimic_no_migraine.csv")
+
+```
+
+```{r}
+ 
+#Part 1: VRFC vs TIA DESEQ
+
+# Merge the count data with the covariates using gene.id
+# Now combined_data contains both the filtered count data and the covariates including diagnosis
+
+filtered_counts_VRFC_vs_TIA <- counts_table %>% 
+  select(gene.id, all_of(pan_df_VRFC_vs_TIA_derivation$Sample_name)) %>% 
+  column_to_rownames(var = "gene.id")
+
+
+print(filtered_counts_VRFC_vs_TIA)
+
+## this sets up the DESeq2 run
+d1 <- DESeqDataSetFromMatrix(countData = filtered_counts_VRFC_vs_TIA,
+                            colData = pan_df_VRFC_vs_TIA_derivation,
+                            design = ~ dm + sex + ht + hc + age_z + diagnosis)
+
+## apply a small filter to get rid of all super low expressed genes
+## get rid of all genes that do not have at least 10 raw read counts across 220 subjects, or the size of the smallest comparison group
+
+# Calculate the smallest group size (70% of total samples)
+smallestGroupSize <- round(0.7 * ncol(counts(d1)))
+
+# Filter genes based on the smallest group size
+keep <- rowSums(counts(d1) >= 10) >= smallestGroupSize
+d1 <- d1[keep,]
+
+# Now 'd1' contains only genes with counts >= 10 in at least 70% of samples
+
+## run DESeq
+ob1_VRFC_vs_TIA <- DESeq(d1)
+## results object
+res <- results(ob1_VRFC_vs_TIA)
+## make a dataframe to see results
+res_table_VRFC_vs_TIA <- data.frame(
+    genes = rownames(res),
+    p_value = res$pvalue, 
+    p_adj = res$padj,
+    mean = res$baseMean, 
+    lfc = res$log2FoldChange, 
+    fold_change = 2^res$log2FoldChange)
+
+print(res_table_VRFC_vs_TIA)
+
+## specify that I want to use diagnosis as my comparison
+res3 <- results(ob1_VRFC_vs_TIA, contrast = c("diagnosis", "1", "0"))
+
+## the result should be the same as res_table2 because it defaults to use the last variable in your design equation above for the comparison
+res_table3 <- data.frame(
+    genes = rownames(res3),
+    p_value = res3$pvalue, 
+    p_adj = res3$padj,
+    mean = res3$baseMean, 
+    lfc = res3$log2FoldChange, 
+    fc = 2^res3$log2FoldChange)
+
+print('This is my VRFC vs TIA')
+print(res_table3)
+
+#smallest group size is 10
+
+new_res_table3 = subset(res_table3, (fc > -1.2 | fc < 1.2))
+
+VRFC_vs_TIA_less_than_sig_p_value_genes = subset(new_res_table3, p_value < 0.05)
+write_csv(VRFC_vs_TIA_less_than_sig_p_value_genes, "VRFC_vs_TIA_less_than_sig_p_value_genes.csv")
+
+VRFC_vs_TIA_less_than_0.1_p_value_genes = subset(new_res_table3, p_value < 0.1)
+write_csv(VRFC_vs_TIA_less_than_0.1_p_value_genes, "VRFC_vs_TIA_less_than_0.1_p_value_genes.csv")
+print("hello")
+VRFC_vs_TIA_less_than_sig_adj_p_value_genes = subset(new_res_table3, p_adj < 0.05)
+write_csv(less_than_sig_adj_p_value_genes, "VRFC_vs_TIA_less_than_sig_adj_p_value_genes.csv")
+print("hello")
+VRFC_vs_TIA_less_than_0.2_adj_p_value_genes = subset(new_res_table3, p_adj < 0.2)
+write_csv(less_than_0.2_adj_p_value_genes, "VRFC_vs_TIA_less_than_0.2_adj_p_value_genes.csv")
+print("hello")
+VRFC_vs_TIA_less_than_0.1_adj_p_value_genes = subset(new_res_table3, p_adj < 0.1)
+write_csv(less_than_0.1_adj_p_value_genes, "VRFC_vs_TIA_less_than_0.1_adj_p_value_genes.csv")
+
+print(nrow(VRFC_vs_TIA_less_than_sig_p_value_genes))
+print(nrow(VRFC_vs_TIA_less_than_0.1_p_value_genes))
+print(nrow(VRFC_vs_TIA_less_than_sig_adj_p_value_genes))
+print(nrow(VRFC_vs_TIA_less_than_0.1_adj_p_value_genes))
+print(nrow(VRFC_vs_TIA_less_than_0.2_adj_p_value_genes))
+```
+
+## DESeq
+
+-   Add raw data, no CPM or log
+
+-   Adjusting the dimensions of your counts table and condition/diagnosis table to look like mine below is the only pre-processing necessary
+
+-   Two things for DESeq object:
+
+    1.  Counts table with gene IDs as row names and subjects as columns
+
+    2.  Diagnosis table with columns of diagnosis/covariate information where subjects are in the same order row-wise as they are in your counts table column-wise
+
+-   Apologies if the language above is confusing, I am not sure how else to describe it
+
+```{r}
+
+#Part 2: VRFC vs Mimic_migraine DESEQ
+
+# Merge the count data with the covariates using gene.id
+# Now combined_data contains both the filtered count data and the covariates including diagnosis
+
+
+
+filtered_counts_VRFC_vs_Mimic_migraine <- counts_table %>% 
+  select(gene.id, all_of(pan_df_VRFC_vs_Mimic_migraine_derivation$Sample_name)) %>% 
+  column_to_rownames(var = "gene.id")
+
+
+print(filtered_counts_VRFC_vs_Mimic_migraine)
+
+## this sets up the DESeq2 run
+d1 <- DESeqDataSetFromMatrix(countData = filtered_counts_VRFC_vs_Mimic_migraine,
+                            colData = pan_df_VRFC_vs_Mimic_migraine_derivation,
+                            design = ~ sex + ht + dm + hc + age_z + diagnosis)
+
+## apply a small filter to get rid of all super low expressed genes
+## get rid of all genes that do not have at least 10 raw read counts across 220 subjects, or the size of the smallest comparison group
+
+# Calculate the smallest group size (70% of total samples)
+smallestGroupSize <- round(0.7 * ncol(counts(d1)))
+
+# Filter genes based on the smallest group size
+keep <- rowSums(counts(d1) >= 5) >= smallestGroupSize
+d1 <- d1[keep,]
+
+# Now 'd1' contains only genes with counts >= 10 in at least 70% of samples
+
+## run DESeq
+ob1_VRFC_vs_Mimic_migraine <- DESeq(d1)
+## results object
+res <- results(ob1_VRFC_vs_Mimic_migraine)
+## make a dataframe to see results
+res_table_VRFC_vs_Mimic_migraine <- data.frame(
+    genes = rownames(res),
+    p_value = res$pvalue, 
+    p_adj = res$padj,
+    mean = res$baseMean, 
+    lfc = res$log2FoldChange, 
+    fold_change = 2^res$log2FoldChange)
+
+print("This is my VRFC vs Mimic migraine before diagnosis specific contrast")
+print(res_table_VRFC_vs_Mimic_migraine)
+
+## specify that I want to use diagnosis as my comparison (0 = VRFC, 1 = Mimic migraine)
+res3 <- results(ob1_VRFC_vs_Mimic_migraine, contrast = c("diagnosis", "1", "0"))
+
+## the result should be the same as res_table2 because it defaults to use the last variable in your design equation above for the comparison
+res_table3 <- data.frame(
+    genes = rownames(res3),
+    p_value = res3$pvalue, 
+    p_adj = res3$padj,
+    mean = res3$baseMean, 
+    lfc = res3$log2FoldChange, 
+    fc = 2^res3$log2FoldChange)
+
+print('This is my VRFC vs Mimic migraine contrast')
+print(res_table3)
+
+new_res_table3 = subset(res_table3, (fc > -1.2 | fc < 1.2))
+
+VRFC_vs_Mimic_migraine_less_than_p_value_genes = subset(new_res_table3, p_value < 0.05)
+write_csv(VRFC_vs_Mimic_migraine_less_than_p_value_genes, "VRFC_vs_Mimic_migraine_less_than_sig_p_value_genes.csv")
+print("hello")
+VRFC_vs_Mimic_migraine_less_than_0.1_p_value_genes = subset(new_res_table3, p_value < 0.1)
+write_csv(VRFC_vs_Mimic_migraine_less_than_0.1_p_value_genes, "VRFC_vs_Mimic_migraine_less_than_0.1_p_value_genes.csv")
+print("hello")
+VRFC_vs_Mimic_migraine_less_than_sig_adj_p_value_genes = subset(new_res_table3, p_adj < 0.05)
+write_csv(VRFC_vs_Mimic_migraine_less_than_sig_adj_p_value_genes, "VRFC_vs_Mimic_migraine_less_than_sig_adj_p_value_genes.csv")
+print("hello")
+VRFC_vs_Mimic_migraine_less_than_0.2_adj_p_value_genes = subset(new_res_table3, p_adj < 0.2)
+write_csv(VRFC_vs_Mimic_migraine_less_than_0.2_adj_p_value_genes, "VRFC_vs_Mimic_migraine_less_than_0.2_adj_p_value_genes.csv")
+print("hello")
+VRFC_vs_Mimic_migraine_less_than_0.1_adj_p_value_genes = subset(new_res_table3, p_adj < 0.1)
+write_csv(VRFC_vs_Mimic_migraine_less_than_0.1_adj_p_value_genes, "VRFC_vs_Mimic_migraine_less_than_0.1_adj_p_value_genes.csv")
+
+
+print(nrow(VRFC_vs_Mimic_migraine_less_than_p_value_genes))
+print(nrow(VRFC_vs_Mimic_migraine_less_than_0.1_p_value_genes))
+print(nrow(VRFC_vs_Mimic_migraine_less_than_sig_adj_p_value_genes))
+print(nrow(VRFC_vs_Mimic_migraine_less_than_0.1_adj_p_value_genes))
+print(nrow(VRFC_vs_Mimic_migraine_less_than_0.2_adj_p_value_genes))
+
+
+
+
+```
+
+```{r}
+#Part 3: VRFC vs Mimic_no_migraine DESEQ
+
+# Merge the count data with the covariates using gene.id
+# Now combined_data contains both the filtered count data and the covariates including diagnosis
+
+filtered_counts_VRFC_vs_Mimic_no_migraine <- counts_table %>% 
+  select(gene.id, all_of(pan_df_VRFC_vs_Mimic_no_migraine_derivation$Sample_name)) %>% 
+  column_to_rownames(var = "gene.id")
+
+
+
+print(filtered_counts_VRFC_vs_Mimic_no_migraine)
+
+## this sets up the DESeq2 run
+d1 <- DESeqDataSetFromMatrix(countData = filtered_counts_VRFC_vs_Mimic_no_migraine,
+                            colData = pan_df_VRFC_vs_Mimic_no_migraine_derivation,
+                            design = ~ sex + ht + dm + hc + age_z + diagnosis)
+
+## apply a small filter to get rid of all super low expressed genes
+## get rid of all genes that do not have at least 10 raw read counts across 220 subjects, or the size of the smallest comparison group
+
+# Calculate the smallest group size (70% of total samples)
+smallestGroupSize <- round(0.7 * ncol(counts(d1)))
+
+# Filter genes based on the smallest group size
+keep <- rowSums(counts(d1) >= 10) >= smallestGroupSize
+d1 <- d1[keep,]
+
+# Now 'd1' contains only genes with counts >= 10 in at least 70% of samples
+
+## run DESeq
+ob1_VRFC_vs_Mimic_no_migraine <- DESeq(d1)
+## results object
+res <- results(ob1_VRFC_vs_Mimic_no_migraine)
+## make a dataframe to see results
+res_table_VRFC_vs_Mimic_no_migraine <- data.frame(
+    genes = rownames(res),
+    p_value = res$pvalue, 
+    p_adj = res$padj,
+    mean = res$baseMean, 
+    lfc = res$log2FoldChange, 
+    fold_change = 2^res$log2FoldChange)
+
+print("This is my VRFC vs Mimic no migraine before diagnosis specific contrast")
+print(res_table_VRFC_vs_Mimic_no_migraine)
+
+## specify that I want to use diagnosis as my comparison (0 = VRFC, 1 = Mimic no  migraine)
+res3 <- results(ob1_VRFC_vs_Mimic_no_migraine, contrast = c("diagnosis", "1", "0"))
+
+## the result should be the same as res_table2 because it defaults to use the last variable in your design equation above for the comparison
+res_table3 <- data.frame(
+    genes = rownames(res3),
+    p_value = res3$pvalue, 
+    p_adj = res3$padj,
+    mean = res3$baseMean, 
+    lfc = res3$log2FoldChange, 
+    fc = 2^res3$log2FoldChange)
+
+print('This is my VRFC vs Mimic no migraine contrast')
+print(res_table3)
+
+
+new_res_table3 = subset(res_table3, (fc > -1.2 | fc < 1.2))
+
+VRFC_vs_Mimic_no_migraine_less_than_p_value_genes = subset(new_res_table3, p_value < 0.05)
+write_csv(VRFC_vs_Mimic_no_migraine_less_than_p_value_genes, "VRFC_vs_Mimic_no_migraine_less_than_sig_p_value_genes.csv")
+
+VRFC_vs_Mimic_no_migraine_less_than_0.1_p_value_genes = subset(new_res_table3, p_value < 0.1)
+write_csv(VRFC_vs_Mimic_no_migraine_less_than_0.1_p_value_genes, "VRFC_vs_Mimic_no_migraine_less_than_0.1_p_value_genes.csv")
+print("hello")
+VRFC_vs_Mimic_no_migraine_less_than_sig_adj_p_value_genes = subset(new_res_table3, p_adj < 0.05)
+write_csv(VRFC_vs_Mimic_no_migraine_less_than_sig_adj_p_value_genes, "VRFC_vs_Mimic_no_migraine_less_than_sig_adj_p_value_genes.csv")
+print("hello")
+VRFC_vs_Mimic_no_migraine_less_than_0.2_adj_p_value_genes = subset(new_res_table3, p_adj < 0.2)
+write_csv(VRFC_vs_Mimic_no_migraine_less_than_0.2_adj_p_value_genes, "VRFC_vs_Mimic_no_migraine_less_than_0.2_adj_p_value_genes.csv")
+print("hello")
+VRFC_vs_Mimic_no_migraine_less_than_0.1_adj_p_value_genes = subset(new_res_table3, p_adj < 0.1)
+write_csv(VRFC_vs_Mimic_no_migraine_less_than_0.1_adj_p_value_genes, "VRFC_vs_Mimic_no_migraine_less_than_0.1_adj_p_value_genes.csv")
+
+
+print(nrow(VRFC_vs_Mimic_no_migraine_less_than_p_value_genes))
+print(nrow(VRFC_vs_Mimic_no_migraine_less_than_0.1_p_value_genes))
+print(nrow(VRFC_vs_Mimic_no_migraine_less_than_sig_adj_p_value_genes))
+print(nrow(VRFC_vs_Mimic_no_migraine_less_than_0.1_adj_p_value_genes))
+print(nrow(VRFC_vs_Mimic_no_migraine_less_than_0.2_adj_p_value_genes))
+```
+
+```         
+```
+
+```{r}
+
+# TIA vs Mimic_migraine DESEQ
+
+# Merge the count data with the covariates using gene.id
+# Now combined_data contains both the filtered count data and the covariates including diagnosis
+
+filtered_counts_TIA_vs_Mimic_migraine <- counts_table %>% 
+  select(gene.id, all_of(pan_df_TIA_vs_Mimic_migraine_derivation$Sample_name)) %>% 
+  column_to_rownames(var = "gene.id")
+
+
+print(filtered_counts_TIA_vs_Mimic_migraine)
+
+## this sets up the DESeq2 run
+d1 <- DESeqDataSetFromMatrix(countData = filtered_counts_TIA_vs_Mimic_migraine,
+                            colData = pan_df_TIA_vs_Mimic_migraine_derivation,
+                            design = ~ sex + ht + dm + hc + age_z + diagnosis)
+
+#d2 <- DESeqDataSetFromMatrix(countData = filtered_counts_TIA_vs_Mimic_migraine,
+                            #colData = pan_df_TIA_vs_Mimic_migraine,
+                           # design = ~ sex + ht + dm + hc + age_z)
+
+## apply a small filter to get rid of all super low expressed genes
+## get rid of all genes that do not have at least 10 raw read counts across 220 subjects, or the size of the smallest comparison group
+
+# Calculate the smallest group size (70% of total samples)
+smallestGroupSize <- round(0.7 * ncol(counts(d1)))
+
+# Filter genes based on the smallest group size
+keep <- rowSums(counts(d1) >= 10) >= smallestGroupSize
+d1 <- d1[keep,]
+
+# Now 'd1' contains only genes with counts >= 10 in at least 70% of samples
+
+## run DESeq
+ob1_TIA_vs_Mimic_migraine <- DESeq(d1)
+## results object
+res <- results(ob1_TIA_vs_Mimic_migraine)
+## make a dataframe to see results
+res_table_TIA_vs_Mimic_migraine <- data.frame(
+    genes = rownames(res),
+    p_value = res$pvalue, 
+    p_adj = res$padj,
+    mean = res$baseMean, 
+    lfc = res$log2FoldChange, 
+    fold_change = 2^res$log2FoldChange)
+
+print("This is my TIA vs Mimic_migraine before diagnosis specific contrast")
+print(res_table_TIA_vs_Mimic_migraine)
+
+## specify that I want to use diagnosis as my comparison (0 = TIA, 1 = Mimic migraine)
+res3 <- results(ob1_TIA_vs_Mimic_migraine, contrast = c("diagnosis", "1", "0"))
+
+## the result should be the same as res_table2 because it defaults to use the last variable in your design equation above for the comparison
+res_table3 <- data.frame(
+    genes = rownames(res3),
+    p_value = res3$pvalue, 
+    p_adj = res3$padj,
+    mean = res3$baseMean, 
+    lfc = res3$log2FoldChange, 
+    fc = 2^res3$log2FoldChange)
+
+print('This is my TIA vs Mimic_migraine contrast')
+print(res_table3)
+
+#smallest group size is 10
+#subset(res_table3, fc > 1.2) #get 166 when group size is 10
+subset(res_table3, p_value < 0.05) #get 166 when group size is 10
+subset(res_table3, p_adj < 0.05) #get 0 when group size is 10
+
+## specify that I want to use diagnosis as my comparison (0 = TIA, 1 = Mimic migraine)
+res4 <- results(ob1_TIA_vs_Mimic_migraine, contrast = c("sex", "1", "0"))
+
+## the result should be the same as res_table2 because it defaults to use the last variable in your design equation above for the comparison
+res_table4 <- data.frame(
+    genes = rownames(res4),
+    p_value = res4$pvalue, 
+    p_adj = res4$padj,
+    mean = res4$baseMean, 
+    lfc = res4$log2FoldChange, 
+    fc = 2^res4$log2FoldChange)
+#lfc should not be negative, fc is expected to be, check calc is correct
+#use 0.005 for covariate genes(take unadjusted p values, be super lax), and 0.05 for diagnosis genes (take adjusted and unadjusted p values)
+#subtract covariate genes from diagnosis genes, plot a venn diagram, after will split by sex won't be balanced most likely
+print('This is my TIA vs Mimic_migraine based on sex contrast')
+print(res_table4)
+subset(res_table4, p_value < 0.05) #get 166 when group size is 10
+subset(res_table4, p_adj < 0.05) #get 0 when group size is 10
+
+
+new_res_table3 = subset(res_table3, (fc > -1.2 | fc < 1.2))
+
+TIA_vs_Mimic_migraine_less_than_p_value_genes = subset(new_res_table3, p_value < 0.05)
+write_csv(TIA_vs_Mimic_migraine_less_than_p_value_genes, "TIA_vs_Mimic_migraine_less_than_sig_p_value_genes.csv")
+
+TIA_vs_Mimic_migraine_less_than_0.1_p_value_genes = subset(new_res_table3, p_value < 0.1)
+write_csv(TIA_vs_Mimic_migraine_less_than_0.1_p_value_genes, "TIA_vs_Mimic_migraine_less_than_0.1_p_value_genes.csv")
+
+
+print("hello")
+TIA_vs_Mimic_migraine_less_than_sig_adj_p_value_genes = subset(new_res_table3, p_adj < 0.05)
+write_csv(TIA_vs_Mimic_migraine_less_than_sig_adj_p_value_genes, "TIA_vs_Mimic_migraine_less_than_sig_adj_p_value_genes.csv")
+print("hello")
+TIA_vs_Mimic_migraine_less_than_0.2_adj_p_value_genes = subset(new_res_table3, p_adj < 0.2)
+write_csv(TIA_vs_Mimic_migraine_less_than_0.2_adj_p_value_genes, "TIA_vs_Mimic_migraine_less_than_0.2_adj_p_value_genes.csv")
+print("hello")
+TIA_vs_Mimic_migraine_less_than_0.1_adj_p_value_genes = subset(new_res_table3, p_adj < 0.1)
+write_csv(TIA_vs_Mimic_migraine_less_than_0.1_adj_p_value_genes, "TIA_vs_Mimic_migraine_less_than_0.1_adj_p_value_genes.csv")
+
+
+
+print(nrow(TIA_vs_Mimic_migraine_less_than_p_value_genes))
+print(nrow(TIA_vs_Mimic_migraine_less_than_0.1_p_value_genes))
+print(nrow(TIA_vs_Mimic_migraine_less_than_sig_adj_p_value_genes))
+print(nrow(TIA_vs_Mimic_migraine_less_than_0.1_adj_p_value_genes))
+print(nrow(TIA_vs_Mimic_migraine_less_than_0.2_adj_p_value_genes))
+
+
+```
+
+filtered_counts_Mimic_no_migraine \<- counts_table %\>%
+
+select(gene.id, all_of(pan_df_Mimic_no_migraine\$Sample_name)) %\>%
+
+column_to_rownames(var = "gene.id")
+
+print(pan_df_Mimic_no_migraine)
+
+\# Merge the count data with the covariates using gene.id
+
+\# Now combined_data contains both the filtered count data and the covariates including diagnosis
+
+print(filtered_counts_Mimic_no_migraine)
+
+\## this sets up the DESeq2 run
+
+d1 \<- DESeqDataSetFromMatrix(countData = filtered_counts_Mimic_no_migraine,
+
+colData = pan_df_Mimic_no_migraine,
+
+design = \~ sex + ht + dm + hc + age_z)
+
+```{r}
+# TIA vs Mimic_no_migraine DESEQ
+
+# Merge the count data with the covariates using gene.id
+# Now combined_data contains both the filtered count data and the covariates including diagnosis
+
+filtered_counts_TIA_vs_Mimic_no_migraine <- counts_table %>% 
+  select(gene.id, all_of(pan_df_TIA_vs_Mimic_no_migraine_derivation$Sample_name)) %>% 
+  column_to_rownames(var = "gene.id")
+
+
+
+print(filtered_counts_TIA_vs_Mimic_no_migraine)
+
+## this sets up the DESeq2 run
+d1 <- DESeqDataSetFromMatrix(countData = filtered_counts_TIA_vs_Mimic_no_migraine,
+                            colData = pan_df_TIA_vs_Mimic_no_migraine_derivation,
+                            design = ~ sex + ht + dm + hc + age_z + diagnosis)
+
+## apply a small filter to get rid of all super low expressed genes
+## get rid of all genes that do not have at least 10 raw read counts across 220 subjects, or the size of the smallest comparison group
+
+# Calculate the smallest group size (70% of total samples)
+smallestGroupSize <- round(0.7 * ncol(counts(d1)))
+
+# Filter genes based on the smallest group size
+keep <- rowSums(counts(d1) >= 25) >= smallestGroupSize
+d1 <- d1[keep,]
+
+# Now 'd1' contains only genes with counts >= 10 in at least 70% of samples
+
+## run DESeq
+ob1_TIA_vs_Mimic_no_migraine <- DESeq(d1)
+## results object
+res <- results(ob1_TIA_vs_Mimic_no_migraine)
+## make a dataframe to see results
+res_table_TIA_vs_Mimic_no_migraine <- data.frame(
+    genes = rownames(res),
+    p_value = res$pvalue, 
+    p_adj = res$padj,
+    mean = res$baseMean, 
+    lfc = res$log2FoldChange, 
+    fold_change = 2^res$log2FoldChange)
+
+print("This is my TIA vs Mimic_no_migraine before diagnosis specific contrast")
+print(res_table_TIA_vs_Mimic_no_migraine)
+
+## specify that I want to use diagnosis as my comparison (0 = TIA, 1 = Mimic no migraine)
+res3 <- results(ob1_TIA_vs_Mimic_no_migraine, contrast = c("diagnosis", "1", "0"))
+
+## the result should be the same as res_table2 because it defaults to use the last variable in your design equation above for the comparison
+res_table3 <- data.frame(
+    genes = rownames(res3),
+    p_value = res3$pvalue, 
+    p_adj = res3$padj,
+    mean = res3$baseMean, 
+    lfc = res3$log2FoldChange, 
+    fc = 2^res3$log2FoldChange)
+
+print('This is my TIA vs Mimic_no_migraine contrast')
+print(res_table3)
+
+#smallest group size is 10
+subset(res_table3, p_value < 0.05) 
+subset(res_table3, p_adj < 0.05) #0 when group size is 10-25
+
+new_res_table3 = subset(res_table3, (fc > -1.2 | fc < 1.2))
+
+TIA_vs_Mimic_no_migraine_less_than_p_value_genes = subset(new_res_table3, p_value < 0.05)
+write_csv(TIA_vs_Mimic_no_migraine_less_than_p_value_genes, "TIA_vs_Mimic_no_migraine_less_than_sig_p_value_genes.csv")
+
+TIA_vs_Mimic_no_migraine_less_than_0.1_p_value_genes = subset(new_res_table3, p_value < 0.1)
+write_csv(TIA_vs_Mimic_no_migraine_less_than_0.1_p_value_genes, "TIA_vs_Mimic_no_migraine_less_than_0.1_p_value_genes.csv")
+
+
+print("hello")
+TIA_vs_Mimic_no_migraine_less_than_sig_adj_p_value_genes = subset(new_res_table3, p_adj < 0.05)
+write_csv(TIA_vs_Mimic_no_migraine_less_than_sig_adj_p_value_genes, "TIA_vs_Mimic_no_migraine_less_than_sig_adj_p_value_genes.csv")
+print("hello")
+TIA_vs_Mimic_no_migraine_less_than_0.2_adj_p_value_genes = subset(new_res_table3, p_adj < 0.2)
+write_csv(TIA_vs_Mimic_no_migraine_less_than_0.2_adj_p_value_genes, "TIA_vs_Mimic_no_migraine_less_than_0.2_adj_p_value_genes.csv")
+print("hello")
+TIA_vs_Mimic_no_migraine_less_than_0.1_adj_p_value_genes = subset(new_res_table3, p_adj < 0.1)
+write_csv(TIA_vs_Mimic_no_migraine_less_than_0.1_adj_p_value_genes, "TIA_vs_Mimic_no_migraine_less_than_0.1_adj_p_value_genes.csv")
+
+
+print(nrow(TIA_vs_Mimic_no_migraine_less_than_p_value_genes))
+print(nrow(TIA_vs_Mimic_no_migraine_less_than_0.1_p_value_genes))
+print(nrow(TIA_vs_Mimic_no_migraine_less_than_sig_adj_p_value_genes))
+print(nrow(TIA_vs_Mimic_no_migraine_less_than_0.1_adj_p_value_genes))
+print(nrow(TIA_vs_Mimic_no_migraine_less_than_0.2_adj_p_value_genes))
+
+
+
+```
+
+```{r}
+# Mimic_migraine vs Mimic_no_migraine DESEQ
+
+# Merge the count data with the covariates using gene.id
+# Now combined_data contains both the filtered count data and the covariates including diagnosis
+
+filtered_counts_Mimic_migraine_vs_Mimic_no_migraine <- counts_table %>% 
+  select(gene.id, all_of(pan_df_Mimic_migraine_vs_Mimic_no_migraine_derivation$Sample_name)) %>% 
+  column_to_rownames(var = "gene.id")
+
+
+
+print(filtered_counts_Mimic_migraine_vs_Mimic_no_migraine)
+
+## this sets up the DESeq2 run
+d1 <- DESeqDataSetFromMatrix(countData = filtered_counts_Mimic_migraine_vs_Mimic_no_migraine,
+                            colData = pan_df_Mimic_migraine_vs_Mimic_no_migraine_derivation,
+                            design = ~ sex + ht + dm + hc + age_z + diagnosis)
+
+## apply a small filter to get rid of all super low expressed genes
+## get rid of all genes that do not have at least 10 raw read counts across 220 subjects, or the size of the smallest comparison group
+
+# Calculate the smallest group size (70% of total samples)
+smallestGroupSize <- round(0.7 * ncol(counts(d1)))
+
+# Filter genes based on the smallest group size
+keep <- rowSums(counts(d1) >= 10) >= smallestGroupSize
+d1 <- d1[keep,]
+
+# Now 'd1' contains only genes with counts >= 10 in at least 70% of samples
+
+## run DESeq
+ob1_Mimic_migraine_vs_Mimic_no_migraine <- DESeq(d1)
+## results object
+res <- results(ob1_Mimic_migraine_vs_Mimic_no_migraine)
+## make a dataframe to see results
+res_table_Mimic_migraine_vs_Mimic_no_migraine <- data.frame(
+    genes = rownames(res),
+    p_value = res$pvalue, 
+    p_adj = res$padj,
+    mean = res$baseMean, 
+    lfc = res$log2FoldChange, 
+    fold_change = 2^res$log2FoldChange)
+
+print("This is my Mimic_migraine vs Mimic_no_migraine before diagnosis specific contrast")
+print(res_table_Mimic_migraine_vs_Mimic_no_migraine)
+
+## specify that I want to use diagnosis as my comparison (0 = Mimic_migraine, 1 = Mimic no migraine)
+res3 <- results(ob1_Mimic_migraine_vs_Mimic_no_migraine, contrast = c("diagnosis", "1", "0"))
+
+## the result should be the same as res_table2 because it defaults to use the last variable in your design equation above for the comparison
+res_table3 <- data.frame(
+    genes = rownames(res3),
+    p_value = res3$pvalue, 
+    p_adj = res3$padj,
+    mean = res3$baseMean, 
+    lfc = res3$log2FoldChange, 
+    fc = 2^res3$log2FoldChange)
+
+print('This is my Mimic_migraine vs Mimic_no_migraine contrast')
+print(res_table3)
+#smallest group size is 10
+subset(res_table3, p_value < 0.05) 
+subset(res_table3, p_adj < 0.05) 
+
+
+new_res_table3 = subset(res_table3, (fc > -1.2 | fc < 1.2))
+
+Mimic_migraine_vs_Mimic_no_migraine_less_than_p_value_genes = subset(new_res_table3, p_value < 0.05)
+write_csv(Mimic_migraine_vs_Mimic_no_migraine_less_than_p_value_genes, "Mimic_migraine_vs_Mimic_no_migraine_less_than_sig_p_value_genes.csv")
+
+Mimic_migraine_vs_Mimic_no_migraine_less_than_0.1_p_value_genes = subset(new_res_table3, p_value < 0.1)
+write_csv(Mimic_migraine_vs_Mimic_no_migraine_less_than_0.1_p_value_genes, "Mimic_migraine_vs_Mimic_no_migraine_less_than_0.1_p_value_genes.csv")
+print("hello")
+Mimic_migraine_vs_Mimic_no_migraine_less_than_sig_adj_p_value_genes = subset(new_res_table3, p_adj < 0.05)
+write_csv(Mimic_migraine_vs_Mimic_no_migraine_less_than_sig_adj_p_value_genes, "Mimic_migraine_vs_Mimic_no_migraine_less_than_sig_adj_p_value_genes.csv")
+print("hello")
+Mimic_migraine_vs_Mimic_no_migraine_less_than_0.2_adj_p_value_genes = subset(new_res_table3, p_adj < 0.2)
+write_csv(Mimic_migraine_vs_Mimic_no_migraine_less_than_0.2_adj_p_value_genes, "Mimic_migraine_vs_Mimic_no_migraine_less_than_0.2_adj_p_value_genes.csv")
+print("hello")
+Mimic_migraine_vs_Mimic_no_migraine_less_than_0.1_adj_p_value_genes = subset(new_res_table3, p_adj < 0.1)
+write_csv(Mimic_migraine_vs_Mimic_no_migraine_less_than_0.1_adj_p_value_genes, "Mimic_migraine_vs_Mimic_no_migraine_less_than_0.1_adj_p_value_genes.csv")
+
+
+print(nrow(Mimic_migraine_vs_Mimic_no_migraine_less_than_p_value_genes))
+print(nrow(Mimic_migraine_vs_Mimic_no_migraine_less_than_0.1_p_value_genes))
+print(nrow(Mimic_migraine_vs_Mimic_no_migraine_less_than_sig_adj_p_value_genes))
+print(nrow(Mimic_migraine_vs_Mimic_no_migraine_less_than_0.1_adj_p_value_genes))
+print(nrow(Mimic_migraine_vs_Mimic_no_migraine_less_than_0.2_adj_p_value_genes))
+
+
+
+
+
+
+
+```
