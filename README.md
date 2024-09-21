@@ -58,47 +58,17 @@ Attempts at gaining better accuracy for XGBoost:
   
 7) Pairwise comparisons between each diagnoses. Choosing top importance features for each pairwise comparison and then using those genes as input for original XGBoost model.
    - VRFC vs TIA: 59% highest accuracy (bad logloss and auc curves)
-       - ENSG00000184792.16	0.238826
-	     ENSG00000185630.19	0.174245
-	     ENSG00000141469.18	0.162960
-	     ENSG00000047597.7	0.154996
-	     ENSG00000183508.5	0.141716
-	     ENSG00000172331.12	0.127256
+       - 
    - VRFC vs Mimic_migraine: 73% accuracy
-      - ENSG00000127054.22	0.232042
-	    ENSG00000151176.8	0.226876
-	    ENSG00000284194.3	0.184622
-	    ENSG00000160883.11	0.178509
-	    ENSG00000164821.5	0.177951
+      - 
    - VRFC vs Mimic_no_migraine: 62.6%
-      - ENSG00000181826.10	0.075702
-	    ENSG00000184640.20	0.069206
-	    ENSG00000155008.16	0.067032
-	    ENSG00000275023.5	0.065777
-	    ENSG00000164104.12	0.063407
+      - 
    - TIA vs Mimic_migraine: 75% highest accuracy (bad logloss and auc curves)
-      - ENSG00000078142.14	0.251240
-    	ENSG00000165071.15	0.166064
-    	ENSG00000279838.1	0.157554
-    	ENSG00000188313.13	0.149527
-    	ENSG00000140307.11	0.137887
-        ENSG00000172243.18	0.137728
+      - 
     - TIA vs Mimic_no_migraine: 68% highest accuracy
-       - ENSG00000113368.12	0.522331
-	     ENSG00000223745.8	0.477669
+       - 
     - Mimic_migraine vs Mimic_no_migraine: 58%
-       - ENSG00000168214.22	0.143432
-	     ENSG00000108433.17	0.099544
-	     ENSG00000152926.16	0.093728
-	     ENSG00000140983.14	0.090334
-	     ENSG00000122862.5	0.089583
-       	 ENSG00000172243.18	0.087065
-	     ENSG00000167528.13	0.085589
-         ENSG00000186174.13	0.085409
-	     ENSG00000122224.18	0.083046
-
-         ENSG00000165071.15	0.071936
-         ENSG00000085377.15	0.070334
+       -
     - Best Overall Accuracy: 41% (test logloss curve was still going up despite early stopping rounds being 10/15)
     - Hyperparameters: n_estimators=400,eta=.08,subsample=.7, colsample_bylevel=.5,booster="dart"
     - Test size: 0.3
@@ -134,14 +104,7 @@ Attempts at gaining better accuracy for XGBoost:
               monotone_constraints=None, multi_strategy=None, n_estimators=650,
               n_jobs=-1, num_parallel_tree=None, ...)
            - Important Genes:
-               - ENSG00000137462.9
-              - ENSG00000186566.13
-              - ENSG00000136560.14
-              - ENSG00000152102.18
-              - ENSG00000152520.14
-              - ENSG00000145649.8
-              - ENSG00000060237.19
-              - ENSG00000169635.10
+               -
            - Confusion Matrix:
              <img width="655" alt="Screen Shot 2024-09-19 at 3 52 37 PM" src="https://github.com/user-attachments/assets/bda4384a-3989-4034-8d91-146202a0fec0">
            - Logloss & Auc Curves:
